@@ -268,7 +268,7 @@ public:
         }
 
 
-        skipFrameNum = 0;
+        skipFrameNum = 1;
 
         for (int i = 0; i < 6; ++i){
             transformCur[i] = 0;
@@ -1775,6 +1775,10 @@ public:
         }
 
         frameCount++;
+        
+        if (remain_all_info){
+            skipFrameNum=0;
+        }
 
         if (frameCount >= skipFrameNum + 1) {
 
@@ -1804,7 +1808,9 @@ public:
     void runFeatureAssociation()
     {
 
-        if (newSegmentedCloud && newSegmentedCloudInfo && newOutlierCloud ){
+        if (newSegmentedCloud && newSegmentedCloudInfo && newOutlierCloud &&
+            std::abs(timeNewSegmentedCloudInfo - timeNewSegmentedCloud) < 0.05 &&
+            std::abs(timeNewOutlierCloud - timeNewSegmentedCloud) < 0.05){
 
             newSegmentedCloud = false;
             newSegmentedCloudInfo = false;

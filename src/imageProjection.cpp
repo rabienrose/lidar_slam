@@ -44,7 +44,7 @@ private:
     ros::Publisher pubSegmentedCloudPure;
     ros::Publisher pubSegmentedCloudInfo;
     ros::Publisher pubOutlierCloud;
-
+   
     pcl::PointCloud<PointType>::Ptr laserCloudIn;
 
     pcl::PointCloud<PointType>::Ptr fullCloud;
@@ -157,8 +157,6 @@ public:
 
         cloudHeader = laserCloudMsg->header;
         pcl::fromROSMsg(*laserCloudMsg, *laserCloudIn);
-        //float verticalAngle = atan2(laserCloudIn->points[0].y, laserCloudIn->points[0].x) * 180 / M_PI;
-        //std::cout<<verticalAngle<<std::endl;
     }
     
     void cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
@@ -189,7 +187,6 @@ public:
         PointType thisPoint;
 
         cloudSize = laserCloudIn->points.size();
-        //std::cout<<cloudSize<<std::endl;
 
         for (size_t i = 0; i < cloudSize; ++i){
 
@@ -409,9 +406,6 @@ public:
 
     
     void publishCloud(){
-        static int temp_count=0;
-        temp_count++;
-        std::cout<<"publishCloud"<<temp_count<<std::endl;
 
         segMsg.header = cloudHeader;
         pubSegmentedCloudInfo.publish(segMsg);

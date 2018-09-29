@@ -19,7 +19,7 @@
 #include <pcl/range_image/range_image.h>
 #include <pcl/filters/filter.h>
 #include <pcl/filters/voxel_grid.h>
-//#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/common/common.h>
 #include <pcl/registration/icp.h>
 
@@ -50,6 +50,9 @@ using namespace std;
 
 typedef pcl::PointXYZI  PointType;
 
+extern const bool remain_all_info = true;
+extern const string root_save_folder = "/home/chamo";
+
 extern const int N_SCAN = 16;
 extern const int Horizon_SCAN = 1800;
 extern const float ang_res_x = 0.2;
@@ -57,8 +60,8 @@ extern const float ang_res_y = 2.0;
 extern const float ang_bottom = 15.0+0.1;
 extern const int groundScanInd = 7;
 
-extern const bool loopClosureEnableFlag = true;
-extern const double mappingProcessInterval = 0.01;
+extern const bool loopClosureEnableFlag = false;
+double mappingProcessInterval = 0.3;
 
 extern const float scanPeriod = 0.1;
 extern const int systemDelay = 0;

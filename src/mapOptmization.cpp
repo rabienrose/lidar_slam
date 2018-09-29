@@ -44,9 +44,6 @@
 
 #include <gtsam/nonlinear/ISAM2.h>
 
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_types.h>
-
 using namespace gtsam;
 
 class mapOptimization{
@@ -86,6 +83,10 @@ public:
     vector<pcl::PointCloud<PointType>::Ptr> cornerCloudKeyFrames;
     vector<pcl::PointCloud<PointType>::Ptr> surfCloudKeyFrames;
     vector<pcl::PointCloud<PointType>::Ptr> outlierCloudKeyFrames;
+    
+    vector<pcl::PointCloud<PointType>::Ptr> hiscornerCloudKeyFrames;
+    vector<pcl::PointCloud<PointType>::Ptr> hissurfCloudKeyFrames;
+    vector<pcl::PointCloud<PointType>::Ptr> hisoutlierCloudKeyFrames;
 
     deque<pcl::PointCloud<PointType>::Ptr> recentCornerCloudKeyFrames;
     deque<pcl::PointCloud<PointType>::Ptr> recentSurfCloudKeyFrames;
@@ -253,6 +254,9 @@ public:
 
         downSizeFilterHistoryKeyFrames.setLeafSize(0.4, 0.4, 0.4);
         downSizeFilterSurroundingKeyPoses.setLeafSize(1.0, 1.0, 1.0);
+
+        downSizeFilterGlobalMapKeyPoses.setLeafSize(1.0, 1.0, 1.0);
+        downSizeFilterGlobalMapKeyFrames.setLeafSize(0.4, 0.4, 0.4);
 
         odomAftMapped.header.frame_id = "/camera_init";
         odomAftMapped.child_frame_id = "/aft_mapped";
@@ -710,20 +714,40 @@ public:
         if (cloudKeyPoses3D->points.empty() == true)
             return;
 
-        for (int i = 0; i < cloudKeyPoses3D->points.size(); ++i){
-			int thisKeyInd = (int)cloudKeyPoses3D->points[i].intensity;
+        std::vector<int> pointSearchIndGlobalMap;
+        std::vector<float> pointSearchSqDisGlobalMap;
+
+        mtx.lock();
+        kdtreeGlobalMap->setInputCloud(cloudKeyPoses3D);
+        kdtreeGlobalMap->radiusSearch(currentRobotPosPoint, globalMapVisualizationSearchRadius, pointSearchIndGlobalMap, pointSearchSqDisGlobalMap, 0);
+        mtx.unlock();
+
+        for (int i = 0; i < pointSearchIndGlobalMap.size(); ++i)
+          globalMapKeyPoses->points.push_back(cloudKeyPoses3D->points[pointSearchIndGlobalMap[i]]);
+
+        downSizeFilterGlobalMapKeyPoses.setInputCloud(globalMapKeyPoses);
+        downSizeFilterGlobalMapKeyPoses.filter(*globalMapKeyPosesDS);
+
+        for (int i = 0; i < globalMapKeyPosesDS->points.size(); ++i){
+			int thisKeyInd = (int)globalMapKeyPosesDS->points[i].intensity;
 			*globalMapKeyFrames += *transformPointCloud(cornerCloudKeyFrames[thisKeyInd],   &cloudKeyPoses6D->points[thisKeyInd]);
 			*globalMapKeyFrames += *transformPointCloud(surfCloudKeyFrames[thisKeyInd],    &cloudKeyPoses6D->points[thisKeyInd]);
 			*globalMapKeyFrames += *transformPointCloud(outlierCloudKeyFrames[thisKeyInd], &cloudKeyPoses6D->points[thisKeyInd]);
         }
+
+        downSizeFilterGlobalMapKeyFrames.setInputCloud(globalMapKeyFrames);
+        downSizeFilterGlobalMapKeyFrames.filter(*globalMapKeyFramesDS);
  
         sensor_msgs::PointCloud2 cloudMsgTemp;
-        pcl::toROSMsg(*globalMapKeyFrames, cloudMsgTemp);
+        pcl::toROSMsg(*globalMapKeyFramesDS, cloudMsgTemp);
         cloudMsgTemp.header.stamp = ros::Time().fromSec(timeLaserOdometry);
         cloudMsgTemp.header.frame_id = "/camera_init";
         pubLaserCloudSurround.publish(cloudMsgTemp);  
 
-        globalMapKeyFrames->clear();   
+        globalMapKeyPoses->clear();
+        globalMapKeyPosesDS->clear();
+        globalMapKeyFrames->clear();
+        globalMapKeyFramesDS->clear();     
     }
 
     void loopClosureThread(){
@@ -1272,6 +1296,19 @@ public:
         currentRobotPosPoint.x = transformAftMapped[3];
         currentRobotPosPoint.y = transformAftMapped[4];
         currentRobotPosPoint.z = transformAftMapped[5];
+        
+        if (!remain_all_info){
+            bool saveThisKeyFrame = true;
+            if (sqrt((previousRobotPosPoint.x-currentRobotPosPoint.x)*(previousRobotPosPoint.x-currentRobotPosPoint.x)
+                    +(previousRobotPosPoint.y-currentRobotPosPoint.y)*(previousRobotPosPoint.y-currentRobotPosPoint.y)
+                    +(previousRobotPosPoint.z-currentRobotPosPoint.z)*(previousRobotPosPoint.z-currentRobotPosPoint.z)) < 0.3){
+                saveThisKeyFrame = false;
+            }
+            if (saveThisKeyFrame == false && !cloudKeyPoses3D->points.empty())
+                return;
+        }
+
+        
 
         previousRobotPosPoint = currentRobotPosPoint;
 
@@ -1343,10 +1380,18 @@ public:
         pcl::copyPointCloud(*laserCloudCornerLastDS,  *thisCornerKeyFrame);
         pcl::copyPointCloud(*laserCloudSurfLastDS,    *thisSurfKeyFrame);
         pcl::copyPointCloud(*laserCloudOutlierLastDS, *thisOutlierKeyFrame);
-
+        
         cornerCloudKeyFrames.push_back(thisCornerKeyFrame);
         surfCloudKeyFrames.push_back(thisSurfKeyFrame);
         outlierCloudKeyFrames.push_back(thisOutlierKeyFrame);
+        
+        pcl::copyPointCloud(*laserCloudCornerLast,  *thisCornerKeyFrame);
+        pcl::copyPointCloud(*laserCloudSurfLast,    *thisSurfKeyFrame);
+        pcl::copyPointCloud(*laserCloudOutlierLast, *thisOutlierKeyFrame);
+        
+        hiscornerCloudKeyFrames.push_back(thisCornerKeyFrame);
+        hissurfCloudKeyFrames.push_back(thisSurfKeyFrame);
+        hisoutlierCloudKeyFrames.push_back(thisOutlierKeyFrame);
     }
 
     void correctPoses(){
@@ -1383,9 +1428,9 @@ public:
 
     void run(){
 
-        if (newLaserCloudCornerLast  &&
-            newLaserCloudSurfLast    &&
-            newLaserCloudOutlierLast && 
+        if (newLaserCloudCornerLast  && std::abs(timeLaserCloudCornerLast  - timeLaserOdometry) < 0.005 &&
+            newLaserCloudSurfLast    && std::abs(timeLaserCloudSurfLast    - timeLaserOdometry) < 0.005 &&
+            newLaserCloudOutlierLast && std::abs(timeLaserCloudOutlierLast - timeLaserOdometry) < 0.005 &&
             newLaserOdometry)
         {
 
@@ -1393,6 +1438,10 @@ public:
 
             std::lock_guard<std::mutex> lock(mtx);
 
+            if (remain_all_info){
+                mappingProcessInterval=0;
+            }
+            
             if (timeLaserOdometry - timeLastProcessing >= mappingProcessInterval) {
 
                 timeLastProcessing = timeLaserOdometry;
@@ -1446,7 +1495,7 @@ int main(int argc, char** argv)
     
     std::cout<<"save traj: "<<MO.cloudKeyPoses6D->points.size()<<std::endl;
     ofstream outfile;
-    outfile.open ("/home/chamo/traj.txt");
+    outfile.open (root_save_folder+ "/traj.txt");
     if (!outfile.is_open())
     {
         std::cout<<"file not open"<<std::endl;
@@ -1472,13 +1521,12 @@ int main(int argc, char** argv)
 
     for (int i = 0; i < MO.cloudKeyPoses3D->points.size(); ++i){
         int thisKeyInd = (int)MO.cloudKeyPoses3D->points[i].intensity;
-        *MO.globalMapKeyFrames += *MO.transformPointCloud(MO.cornerCloudKeyFrames[thisKeyInd],   &MO.cloudKeyPoses6D->points[thisKeyInd]);
-        *MO.globalMapKeyFrames += *MO.transformPointCloud(MO.surfCloudKeyFrames[thisKeyInd],    &MO.cloudKeyPoses6D->points[thisKeyInd]);
-        *MO.globalMapKeyFrames += *MO.transformPointCloud(MO.outlierCloudKeyFrames[thisKeyInd], &MO.cloudKeyPoses6D->points[thisKeyInd]);
+        *MO.globalMapKeyFrames += *MO.transformPointCloud(MO.hisoutlierCloudKeyFrames[thisKeyInd],   &MO.cloudKeyPoses6D->points[thisKeyInd]);
+        *MO.globalMapKeyFrames += *MO.transformPointCloud(MO.hiscornerCloudKeyFrames[thisKeyInd],    &MO.cloudKeyPoses6D->points[thisKeyInd]);
+        *MO.globalMapKeyFrames += *MO.transformPointCloud(MO.hissurfCloudKeyFrames[thisKeyInd], &MO.cloudKeyPoses6D->points[thisKeyInd]);
     }
     
-    pcl::io::savePCDFile ("/home/chamo/test_pcd.pcd", *MO.globalMapKeyFrames);
-
+    pcl::io::savePCDFile (root_save_folder+ "/point_cloud.pcd", *MO.globalMapKeyFrames);
 
     return 0;
 }
