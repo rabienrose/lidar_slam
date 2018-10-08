@@ -598,6 +598,7 @@ public:
                     VeloToStartIMU();
                     TransformToStartIMU(&point);
                 }
+                std::cout<<"got me"<<std::endl;
             }
             segmentedCloud->points[i] = point;
         }
@@ -802,47 +803,6 @@ public:
 	        pubSurfPointsLessFlat.publish(laserCloudOutMsg);
 	    }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     void TransformToStart(PointType const * const pi, PointType * const po)
     {
