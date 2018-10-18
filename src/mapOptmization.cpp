@@ -1526,7 +1526,32 @@ int main(int argc, char** argv)
         *MO.globalMapKeyFrames += *MO.transformPointCloud(MO.hissurfCloudKeyFrames[thisKeyInd], &MO.cloudKeyPoses6D->points[thisKeyInd]);
     }
     
-    pcl::io::savePCDFile (root_save_folder+ "/point_cloud.pcd", *MO.globalMapKeyFrames);
+    Eigen::Vector4f v0=Eigen::Vector4f::Zero();
+    Eigen::Quaternionf q0=Eigen::Quaternionf::Identity();
+    
+    pcl::io::savePCDFile (root_save_folder+ "/point_cloud_all.pcd", *MO.globalMapKeyFrames, true);
+    MO.globalMapKeyFrames.reset(new pcl::PointCloud<PointType>());
+    for (int i = 0; i < MO.cloudKeyPoses3D->points.size(); ++i){
+        int thisKeyInd = (int)MO.cloudKeyPoses3D->points[i].intensity;
+        *MO.globalMapKeyFrames += *MO.transformPointCloud(MO.hisoutlierCloudKeyFrames[thisKeyInd],   &MO.cloudKeyPoses6D->points[thisKeyInd]);
+    }
+    
+    pcl::io::savePCDFile (root_save_folder+ "/point_cloud_ceil.pcd", *MO.globalMapKeyFrames, true);
+    MO.globalMapKeyFrames.reset(new pcl::PointCloud<PointType>());
+    for (int i = 0; i < MO.cloudKeyPoses3D->points.size(); ++i){
+        int thisKeyInd = (int)MO.cloudKeyPoses3D->points[i].intensity;
+        *MO.globalMapKeyFrames += *MO.transformPointCloud(MO.hiscornerCloudKeyFrames[thisKeyInd],    &MO.cloudKeyPoses6D->points[thisKeyInd]);
+    }
+    
+    pcl::io::savePCDFile (root_save_folder+ "/point_cloud_colume.pcd", *MO.globalMapKeyFrames, true);
+    
+    MO.globalMapKeyFrames.reset(new pcl::PointCloud<PointType>());
+    for (int i = 0; i < MO.cloudKeyPoses3D->points.size(); ++i){
+        int thisKeyInd = (int)MO.cloudKeyPoses3D->points[i].intensity;
+        *MO.globalMapKeyFrames += *MO.transformPointCloud(MO.hissurfCloudKeyFrames[thisKeyInd], &MO.cloudKeyPoses6D->points[thisKeyInd]);
+    }
+    
+    pcl::io::savePCDFile (root_save_folder+ "/point_cloud_surf.pcd", *MO.globalMapKeyFrames, true);
 
     return 0;
 }
